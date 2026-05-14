@@ -25,3 +25,17 @@ navOptions.forEach(card => {
 
     });
 });
+
+const timeframes = document.querySelectorAll(".timeframe");
+
+timeframes.forEach(frame => {
+    frame.addEventListener("click", () => {
+
+        timeframes.forEach(item => {
+            item.classList.remove("active-timeframe");
+        });
+
+        frame.classList.add("active-timeframe");
+
+    });
+});

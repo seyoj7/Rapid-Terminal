@@ -41,7 +41,17 @@
         </div>
 
         <div class="chart">
-            <div class="chart-dashboard"></div>
+            <div class="chart-dashboard">
+                <h1 class="selected-token">BTC/USDT</h1>
+                <div class="timeframes">
+                    <div class="timeframe">5m</div>
+                    <div class="timeframe active-timeframe">15m</div>
+                    <div class="timeframe">1h</div>
+                    <div class="timeframe">4h</div>
+                    <div class="timeframe">1d</div>
+                    <div class="timeframe">1w</div>
+                </div>
+            </div>
         </div>
         
         <style>
@@ -102,7 +112,19 @@
             }
             .chart-dashboard{
                 height: 30px; border-bottom: 1px solid rgb(143, 143, 143); display:flex;
-                align-items: center;
+                align-items: center; justify-content: space-between;
+            }
+            .selected-token{
+                font-size: 15px; padding: 5px
+            }
+            .timeframes{
+                display: flex; padding: 5px;
+            }
+            .timeframe{
+                display: flex; padding:5px; cursor: pointer;
+            }
+            .active-timeframe{
+                color:aquamarine;
             }
         </style>
         <script src="script.js"></script>
