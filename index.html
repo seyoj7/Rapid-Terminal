@@ -36,6 +36,23 @@
                 </div>
             </div>
         </div>
+
+        <div class="nav-section">
+            <div class="nav-options">
+                <div class="nav-option active-option">
+                    <p>Dashboard</p>
+                </div>
+                <div class="nav-option">
+                    <p>news</p>
+                </div>
+                <div class="nav-option">
+                    <p>wallets</p>
+                </div>
+                <div class="nav-option">
+                    <p>positions</p>
+                </div>                
+            </div>
+        </div>
         
         <style>
             *{
@@ -65,15 +82,29 @@
                 height:32px; border-bottom:1px solid rgb(126, 126, 126);
                 display:flex; align-items:center;
             }
-            .coin-card{
-                padding:5px 5px; border: none ;color: white;
-                cursor: pointer; border-right:1px solid rgb(121, 121, 121);
-            }
             .market-ticker{
                 display:flex;
             }
+            .coin-card{
+                padding:5px 6px; border: none ; color: white;
+                cursor: pointer; border-right:1px solid rgb(121, 121, 121);
+            }
             .active-coin{
                 border-bottom:2px solid rgb(26, 199, 141);
+            }
+            .nav-section{
+                height:32px; border-bottom:1px solid rgb(126, 126, 126);
+                display:flex; align-items:center;
+            }
+            .nav-options{
+                display: flex;
+            }
+            .nav-option{
+                padding:5px 6px; border: none; color: white;
+                cursor: pointer; border-right:1px solid rgb(121, 121, 121);
+            }
+            .active-option{
+                border-bottom: 2px solid rgb(0, 162, 255)
             }
         </style>
         <script src="script.js"></script>

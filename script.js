@@ -11,3 +11,17 @@ coinCards.forEach(card => {
 
     });
 });
+
+const navOptions = document.querySelectorAll(".nav-option");
+
+navOptions.forEach(card => {
+    card.addEventListener("click", () => {
+
+        navOptions.forEach(item => {
+            item.classList.remove("active-option");
+        });
+
+        card.classList.add("active-option");
+
+    });
+});
