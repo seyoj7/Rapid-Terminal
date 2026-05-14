@@ -34,15 +34,15 @@
         <div class="nav-section">
             <div class="nav-options">
                 <div class="nav-option active-option">Dashboard</div>
-                <div class="nav-option">news</div>
-                <div class="nav-option">wallets</div>
-                <div class="nav-option">positions</div>                
+                <div class="nav-option">News</div>
+                <div class="nav-option">Wallets</div>
+                <div class="nav-option">Positions</div>                
             </div>
         </div>
 
-        <div class="chart">
-            <div class="chart-dashboard">
-                <h1 class="selected-token">BTC/USDT</h1>
+        <div class="chart-panel">
+            <div class="chart-header">
+                <h1 class="selected-token"></h1>
                 <div class="timeframes">
                     <div class="timeframe">5m</div>
                     <div class="timeframe active-timeframe">15m</div>
@@ -51,6 +51,12 @@
                     <div class="timeframe">1d</div>
                     <div class="timeframe">1w</div>
                 </div>
+            </div>
+        </div>
+
+        <div class="nav-panel">
+            <div class="nav-panel-header">
+                <h1 class="selected-nav"></h1>
             </div>
         </div>
         
@@ -106,16 +112,16 @@
             .active-option{
                 border-bottom: 2px solid rgb(0, 162, 255)
             }
-            .chart{
-                height: 500px; padding: 1px; border:0.1px solid rgb(255, 255, 255);
-                border-radius: 4px;
+            .chart-panel{
+                height: 500px; border: 0.1px solid rgb(146, 146, 146); padding: 1px;
+                border-radius: 5px; margin-top: 1px;
             }
-            .chart-dashboard{
-                height: 30px; border-bottom: 1px solid rgb(143, 143, 143); display:flex;
-                align-items: center; justify-content: space-between;
+            .chart-header{
+                height: 30px; border-bottom: 1px solid rgb(143, 143, 143);
+                display:flex; align-items: center; justify-content: space-between;
             }
             .selected-token{
-                font-size: 15px; padding: 5px
+                font-size: 15px; padding: 5px;
             }
             .timeframes{
                 display: flex; padding: 5px;
@@ -125,6 +131,17 @@
             }
             .active-timeframe{
                 color:aquamarine;
+            }
+            .nav-panel{
+                height: 300px; border: 1px solid rgb(146, 146, 146); padding: 1px;
+                border-radius: 5px; margin-top:1px;
+            }
+            .nav-panel-header{
+                height: 30px; border-bottom: 1px solid rgb(143, 143, 143);
+                display: flex; align-items: center; justify-content: space-between;
+            }
+            .selected-nav{
+                font-size: 15px; padding:5px;
             }
         </style>
         <script src="script.js"></script>

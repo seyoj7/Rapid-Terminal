@@ -39,3 +39,39 @@ timeframes.forEach(frame => {
 
     });
 });
+
+const selectedToken = document.querySelector(".selected-token");
+
+selectedToken.textContent = document.querySelector(".active-coin").textContent;
+
+coinCards.forEach(card => {
+    card.addEventListener("click", () => {
+
+        coinCards.forEach(item => {
+            item.classList.remove("active-coin");
+        });
+
+        card.classList.add("active-coin");
+
+        selectedToken.textContent = card.textContent;
+
+    });
+});
+
+const selectednav = document.querySelector(".selected-nav");
+
+selectednav.textContent = document.querySelector(".active-option").textContent;
+
+navOptions.forEach(item => {
+    item.addEventListener("click", () => {
+
+        navOptions.forEach(item => {
+            item.classList.remove("active-option");
+        });
+
+        item.classList.add("active-option");
+
+        selectednav.textContent = item.textContent;
+
+    });
+});
