@@ -120,30 +120,63 @@ resizeObserver.observe(domElement);
 window.addEventListener("resize", resizeChart);
 
 coins.forEach((coin, index) => {
-    fetch(`https://api.binance.com/api/v3/klines?symbol=${coin.symbol}&interval=1m&limit=100`)
+    fetch(`https://api.binance.com/api/v3/klines?symbol=${coin.symbol}&interval=1m&limit=250`)
         .then(res => res.json())
         .then(data => {
-            const cdata = data.map(d => ({
-                time: d[0]/1000, open: parseFloat(d[1]),
-                high: parseFloat(d[2]), low: parseFloat(d[3]), close: parseFloat(d[4])
-            }));
+            coin.cdata = data.map(c => ({
+                time: Math.floor(c[0] / 1000),
+                open: +c[1],
+                high: +c[2],
+                low: +c[3],
+                close: +c[4]
+            }))
+            .filter((c, i, arr) => i === 0 || c.time !== arr[i - 1].time)
+            .sort((a, b) => a.time - b.time);
 
-            const firstOpen = cdata[0].open;
-            const latestClose = cdata[cdata.length - 1].close;
-            const change = ((latestClose - firstOpen) / firstOpen * 100).toFixed(2);
-
-            coin.price = latestClose.toFixed(2);
-            coin.change = parseFloat(change);
+            const first = coin.cdata[0].open;
+            const latest = coin.cdata[coin.cdata.length - 1].close;
+            coin.price = latest.toFixed(2);
+            coin.change = +((latest - first) / first * 100).toFixed(2);
 
             const card = document.querySelectorAll(".coin-card")[index];
             card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
 
-            coin.cdata = cdata;
-
             if (index === 0) {
-                candleSeries.setData(cdata);
+                candleSeries.setData(coin.cdata);
                 selectedToken.textContent = card.textContent;
             }
         })
-        .catch(err => log(err));
+        .catch(err => console.error(err));
 });
+
+function connectWebSocket(coin, index) {
+    const stream = coin.symbol.toLowerCase() + "@kline_1m";
+    const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${stream}`);
+
+    ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        const k = msg.k;
+
+        const candle = {
+            time: k.t / 1000,
+            open: parseFloat(k.o),
+            high: parseFloat(k.h),
+            low: parseFloat(k.l),
+            close: parseFloat(k.c),
+        };
+
+        coin.price = parseFloat(k.c).toFixed(2);
+        coin.change = parseFloat(((k.c - k.o) / k.o * 100).toFixed(2));
+
+        const card = document.querySelectorAll(".coin-card")[index];
+        card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
+
+        const activeIndex = [...document.querySelectorAll(".coin-card")].findIndex(c => c.classList.contains("active-coin"));
+        if (activeIndex === index) {
+            candleSeries.update(candle);
+            selectedToken.textContent = card.textContent;
+        }
+    };
+}
+
+coins.forEach((coin, index) => connectWebSocket(coin, index));
