@@ -9,20 +9,23 @@ const selectedToken = document.querySelector(".selected-token");
 const ticker = document.querySelector(".market-ticker");
 
 coins.forEach((coin, index) => {
-  const card = document.createElement("div");
-  card.classList.add("coin-card");
-  if (index === 0) card.classList.add("active-coin");
-  card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
+    const card = document.createElement("div");
+    card.classList.add("coin-card");
+    if (index === 0) card.classList.add("active-coin");
+    card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
   
-  card.addEventListener("click", () => {
-    document.querySelectorAll(".coin-card").forEach(c => c.classList.remove("active-coin"));
-    card.classList.add("active-coin");
-    selectedToken.textContent = card.textContent;
-  });
+    card.addEventListener("click", () => {
+        document.querySelectorAll(".coin-card").forEach(c => c.classList.remove("active-coin"));
+        card.classList.add("active-coin");
+        selectedToken.textContent = card.textContent;
+        if (coins[index].cdata) {
+            candleSeries.setData(coins[index].cdata);
+        }
+    });
   
-  ticker.appendChild(card);
+    ticker.appendChild(card);
 
-  selectedToken.textContent = document.querySelector(".active-coin").textContent;
+    selectedToken.textContent = document.querySelector(".active-coin").textContent;
 });
 
 const navOptions = document.querySelectorAll(".nav-option");
@@ -134,6 +137,8 @@ coins.forEach((coin, index) => {
 
             const card = document.querySelectorAll(".coin-card")[index];
             card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
+
+            coin.cdata = cdata;
 
             if (index === 0) {
                 candleSeries.setData(cdata);
