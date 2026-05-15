@@ -1,7 +1,7 @@
 const coins = [
-  { pair: "BTC/USDT", price: 103420, change: 1.5 },
-  { pair: "ETH/USDT", price: 2450,   change: 1.2 },
-  { pair: "SOL/USDT", price: 172,    change: -1.5 },
+  { pair: "BTC/USDT", symbol: "BTCUSDT", price: 0, change: 0 },
+  { pair: "ETH/USDT", symbol: "ETHUSDT", price: 0, change: 0 },
+  { pair: "SOL/USDT", symbol: "SOLUSDT", price: 0, change: 0 },
 ];
 
 const selectedToken = document.querySelector(".selected-token");
@@ -79,8 +79,8 @@ const chartProperties ={
         textColor: '#ffffff',
     },
     grid: {
-        vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
-        horzLines: { color: 'rgba(255, 255, 255, 0.1)' },
+        vertLines: { color: 'rgba(255, 255, 255, 0)' },
+        horzLines: { color: 'rgba(255, 255, 255, 0)' },
     },
     rightPriceScale: {
         visible: true,
@@ -116,12 +116,29 @@ const resizeObserver = new ResizeObserver(resizeChart);
 resizeObserver.observe(domElement);
 window.addEventListener("resize", resizeChart);
 
-fetch("https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=100")
-    .then(res => res.json())
-    .then(data => {
-        const cdata = data.map(d => {
-            return {time: d[0]/1000, open:parseFloat(d[1]), high:parseFloat(d[2]), low:parseFloat(d[3]), close:parseFloat(d[4])}
-        });
-        candleSeries.setData(cdata);
-    })
-    .catch(err => log (err))
+coins.forEach((coin, index) => {
+    fetch(`https://api.binance.com/api/v3/klines?symbol=${coin.symbol}&interval=1m&limit=100`)
+        .then(res => res.json())
+        .then(data => {
+            const cdata = data.map(d => ({
+                time: d[0]/1000, open: parseFloat(d[1]),
+                high: parseFloat(d[2]), low: parseFloat(d[3]), close: parseFloat(d[4])
+            }));
+
+            const firstOpen = cdata[0].open;
+            const latestClose = cdata[cdata.length - 1].close;
+            const change = ((latestClose - firstOpen) / firstOpen * 100).toFixed(2);
+
+            coin.price = latestClose.toFixed(2);
+            coin.change = parseFloat(change);
+
+            const card = document.querySelectorAll(".coin-card")[index];
+            card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
+
+            if (index === 0) {
+                candleSeries.setData(cdata);
+                selectedToken.textContent = card.textContent;
+            }
+        })
+        .catch(err => log(err));
+});
