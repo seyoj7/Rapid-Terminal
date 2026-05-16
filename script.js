@@ -4,6 +4,9 @@ const coins = [
   { pair: "SOL/USDT", symbol: "SOLUSDT", price: 0, change: 0 },
 ];
 
+let currentInterval = "15m";
+let activeCoin = coins[0];
+
 const selectedToken = document.querySelector(".selected-token");
 
 const ticker = document.querySelector(".market-ticker");
@@ -18,9 +21,8 @@ coins.forEach((coin, index) => {
         document.querySelectorAll(".coin-card").forEach(c => c.classList.remove("active-coin"));
         card.classList.add("active-coin");
         selectedToken.textContent = card.textContent;
-        if (coins[index].cdata) {
-            candleSeries.setData(coins[index].cdata);
-        }
+        activeCoin = coins[index];
+        fetchCandles(activeCoin, currentInterval);
     });
   
     ticker.appendChild(card);
@@ -52,6 +54,8 @@ timeframes.forEach(frame => {
         });
 
         frame.classList.add("active-timeframe");
+        currentInterval = frame.textContent;
+        fetchCandles(activeCoin, currentInterval);
 
     });
 });
@@ -106,6 +110,7 @@ const chart = LightweightCharts.createChart(domElement, {
     height: domElement.clientHeight,
 });
 const candleSeries = chart.addCandlestickSeries();
+let chartWs = null;
 
 const resizeChart = () => {
     const width = domElement.clientWidth;
@@ -119,11 +124,13 @@ const resizeObserver = new ResizeObserver(resizeChart);
 resizeObserver.observe(domElement);
 window.addEventListener("resize", resizeChart);
 
-coins.forEach((coin, index) => {
-    fetch(`https://api.binance.com/api/v3/klines?symbol=${coin.symbol}&interval=1m&limit=250`)
+fetchCandles(activeCoin, currentInterval);
+
+function fetchCandles(coin, interval) {
+    fetch(`https://api.binance.com/api/v3/klines?symbol=${coin.symbol}&interval=${interval}&limit=250`)
         .then(res => res.json())
         .then(data => {
-            coin.cdata = data.map(c => ({
+            const candles = data.map(c => ({
                 time: Math.floor(c[0] / 1000),
                 open: +c[1],
                 high: +c[2],
@@ -133,21 +140,11 @@ coins.forEach((coin, index) => {
             .filter((c, i, arr) => i === 0 || c.time !== arr[i - 1].time)
             .sort((a, b) => a.time - b.time);
 
-            const first = coin.cdata[0].open;
-            const latest = coin.cdata[coin.cdata.length - 1].close;
-            coin.price = latest.toFixed(2);
-            coin.change = +((latest - first) / first * 100).toFixed(2);
-
-            const card = document.querySelectorAll(".coin-card")[index];
-            card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
-
-            if (index === 0) {
-                candleSeries.setData(coin.cdata);
-                selectedToken.textContent = card.textContent;
-            }
+            candleSeries.setData(candles);
+            connectChartWebSocket(coin, interval);
         })
         .catch(err => console.error(err));
-});
+}
 
 function connectWebSocket(coin, index) {
     const stream = coin.symbol.toLowerCase() + "@kline_1m";
@@ -157,14 +154,6 @@ function connectWebSocket(coin, index) {
         const msg = JSON.parse(event.data);
         const k = msg.k;
 
-        const candle = {
-            time: k.t / 1000,
-            open: parseFloat(k.o),
-            high: parseFloat(k.h),
-            low: parseFloat(k.l),
-            close: parseFloat(k.c),
-        };
-
         coin.price = parseFloat(k.c).toFixed(2);
         coin.change = parseFloat(((k.c - k.o) / k.o * 100).toFixed(2));
 
@@ -173,9 +162,32 @@ function connectWebSocket(coin, index) {
 
         const activeIndex = [...document.querySelectorAll(".coin-card")].findIndex(c => c.classList.contains("active-coin"));
         if (activeIndex === index) {
-            candleSeries.update(candle);
             selectedToken.textContent = card.textContent;
         }
+    };
+}
+
+function connectChartWebSocket(coin, interval) {
+    if (chartWs) {
+        chartWs.close();
+    }
+
+    const stream = coin.symbol.toLowerCase() + `@kline_${interval}`;
+    chartWs = new WebSocket(`wss://stream.binance.com:9443/ws/${stream}`);
+
+    chartWs.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        const k = msg.k;
+
+        const candle = {
+            time: Math.floor(k.t / 1000),
+            open: parseFloat(k.o),
+            high: parseFloat(k.h),
+            low: parseFloat(k.l),
+            close: parseFloat(k.c),
+        };
+
+        candleSeries.update(candle);
     };
 }
 
