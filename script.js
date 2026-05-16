@@ -22,6 +22,7 @@ coins.forEach((coin, index) => {
         card.classList.add("active-coin");
         selectedToken.textContent = card.textContent;
         activeCoin = coins[index];
+        resetFutureWhitespace();
         fetchCandles(activeCoin, currentInterval);
     });
   
@@ -55,6 +56,7 @@ timeframes.forEach(frame => {
 
         frame.classList.add("active-timeframe");
         currentInterval = frame.textContent;
+        resetFutureWhitespace();
         fetchCandles(activeCoin, currentInterval);
 
     });
@@ -80,7 +82,7 @@ navOptions.forEach(item => {
 
 const log = console.log;
 
-const chartProperties ={
+const chartProperties = {
     layout: {
         background: { color: '#000000' },
         textColor: '#ffffff',
@@ -97,11 +99,39 @@ const chartProperties ={
             bottom: 0.1,
         },
     },
-    timeScale:{
-        timeVisible:true,
-        secondsVisible:false,
+    timeScale: {
+        timeVisible: true,
+        secondsVisible: false,
         rightOffset: 40,
-    }
+        barSpacing: 6,
+        minBarSpacing: 0.5,
+        fixLeftEdge: false,
+        fixRightEdge: false,
+        lockVisibleTimeRangeOnResize: false,
+        borderVisible: true,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    localization: {
+        timeFormatter: (timestamp) => {
+            const isIntraday = currentInterval.endsWith('m') || currentInterval.endsWith('h');
+            const date = new Date(timestamp * 1000);
+            if (isIntraday) {
+                return new Intl.DateTimeFormat('en-IN', {
+                    timeZone: 'Asia/Kolkata',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    day: '2-digit',
+                    month: 'short',
+                }).format(date);
+            }
+            return new Intl.DateTimeFormat('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                year: 'numeric',
+                month: 'short',
+                day: '2-digit',
+            }).format(date);
+        },
+    },
 }
 
 const domElement = document.getElementById('tvcharts');
@@ -111,42 +141,18 @@ const chart = LightweightCharts.createChart(domElement, {
     height: domElement.clientHeight,
 });
 const candleSeries = chart.addCandlestickSeries();
+
+const whitespaceSeries = chart.addLineSeries({
+    color: 'transparent',
+    lineWidth: 0,
+    crosshairMarkerVisible: false,
+    lastValueVisible: false,
+    priceLineVisible: false,
+    autoscaleInfoProvider: () => null,
+});
+
 let chartWs = null;
-
-const istTimeFormatter = new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    hour: "2-digit",
-    minute: "2-digit",
-});
-
-const istDateFormatter = new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-});
-
-const formatIstLabel = (time) => {
-    const isIntraday = currentInterval.endsWith("m") || currentInterval.endsWith("h");
-
-    if (typeof time === "number") {
-        const date = new Date(time * 1000);
-        return isIntraday ? istTimeFormatter.format(date) : istDateFormatter.format(date);
-    }
-
-    if (time && typeof time === "object" && "year" in time) {
-        const utcDate = new Date(Date.UTC(time.year, time.month - 1, time.day));
-        return isIntraday ? istTimeFormatter.format(utcDate) : istDateFormatter.format(utcDate);
-    }
-
-    return "";
-};
-
-chart.applyOptions({
-    timeScale: {
-        tickMarkFormatter: formatIstLabel,
-    },
-});
+let futureAnchorTime = 0;
 
 const resizeChart = () => {
     const width = domElement.clientWidth;
@@ -159,6 +165,54 @@ const resizeChart = () => {
 const resizeObserver = new ResizeObserver(resizeChart);
 resizeObserver.observe(domElement);
 window.addEventListener("resize", resizeChart);
+
+// Returns interval duration in seconds.
+function parseIntervalSecs(interval) {
+    const n = parseInt(interval);
+    if (interval.endsWith('m')) return n * 60;
+    if (interval.endsWith('h')) return n * 3600;
+    if (interval.endsWith('d')) return n * 86400;
+    if (interval.endsWith('w')) return n * 7 * 86400;
+    return 60;
+}
+
+// Appends `count` more future timestamps starting after futureAnchorTime.
+// Uses update() per point so the series only ever grows rightward.
+function extendFutureWhitespace(fromTimeSec, interval, count = 100) {
+    const step = parseIntervalSecs(interval);
+    // If we're resetting (new symbol / timeframe), wipe and restart.
+    if (fromTimeSec < futureAnchorTime && fromTimeSec !== 0) {
+        whitespaceSeries.setData([]);
+        futureAnchorTime = 0;
+    }
+    const start = Math.max(fromTimeSec, futureAnchorTime);
+    for (let i = 1; i <= count; i++) {
+        const t = start + step * i;
+        whitespaceSeries.update({ time: t });
+        futureAnchorTime = t;
+    }
+}
+
+// Resets whitespace entirely (call when switching symbol or timeframe).
+function resetFutureWhitespace() {
+    futureAnchorTime = 0;
+    whitespaceSeries.setData([]);
+}
+
+// Dynamically extend when user scrolls near the right edge.
+chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+    if (!range || futureAnchorTime === 0) return;
+    const step = parseIntervalSecs(currentInterval);
+    const edgeTime = futureAnchorTime;
+    // Convert visible right logical index to approximate timestamp.
+    // We extend if the visible right is within 30 bars of the whitespace end.
+    const totalBars = chart.timeScale().getVisibleRange();
+    if (!totalBars) return;
+    const rightTimeSec = totalBars.to;
+    if (typeof rightTimeSec === 'number' && edgeTime - rightTimeSec < step * 30) {
+        extendFutureWhitespace(futureAnchorTime, currentInterval, 100);
+    }
+});
 
 fetchCandles(activeCoin, currentInterval);
 
@@ -177,6 +231,11 @@ function fetchCandles(coin, interval) {
             .sort((a, b) => a.time - b.time);
 
             candleSeries.setData(candles);
+
+            // Seed future timestamps so the time axis extends past the last candle.
+            const lastTime = candles[candles.length - 1].time;
+            extendFutureWhitespace(lastTime, interval);
+
             connectChartWebSocket(coin, interval);
         })
         .catch(err => console.error(err));
@@ -224,6 +283,11 @@ function connectChartWebSocket(coin, interval) {
         };
 
         candleSeries.update(candle);
+
+        // When a candle closes, roll the future window forward by one slot.
+        if (k.x) {
+            extendFutureWhitespace(candle.time, interval);
+        }
     };
 }
 
