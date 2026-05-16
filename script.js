@@ -100,6 +100,7 @@ const chartProperties ={
     timeScale:{
         timeVisible:true,
         secondsVisible:false,
+        rightOffset: 40,
     }
 }
 
@@ -111,6 +112,41 @@ const chart = LightweightCharts.createChart(domElement, {
 });
 const candleSeries = chart.addCandlestickSeries();
 let chartWs = null;
+
+const istTimeFormatter = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+});
+
+const istDateFormatter = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+});
+
+const formatIstLabel = (time) => {
+    const isIntraday = currentInterval.endsWith("m") || currentInterval.endsWith("h");
+
+    if (typeof time === "number") {
+        const date = new Date(time * 1000);
+        return isIntraday ? istTimeFormatter.format(date) : istDateFormatter.format(date);
+    }
+
+    if (time && typeof time === "object" && "year" in time) {
+        const utcDate = new Date(Date.UTC(time.year, time.month - 1, time.day));
+        return isIntraday ? istTimeFormatter.format(utcDate) : istDateFormatter.format(utcDate);
+    }
+
+    return "";
+};
+
+chart.applyOptions({
+    timeScale: {
+        tickMarkFormatter: formatIstLabel,
+    },
+});
 
 const resizeChart = () => {
     const width = domElement.clientWidth;
