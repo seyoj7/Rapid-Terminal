@@ -225,6 +225,8 @@ function fetchCandles(coin, interval) {
         .then(candles => {
             candleSeries.setData(candles);
 
+            chart.priceScale('right').applyOptions({ autoScale: true });
+
             const lastTime = candles[candles.length - 1].time;
             extendFutureWhitespace(lastTime, interval);
 
