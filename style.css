@@ -47,7 +47,7 @@
         cursor: pointer; border-right:1px solid rgb(121, 121, 121);
     }
     .active-option{
-        border-bottom: 2px solid rgb(0, 162, 255)
+        border-bottom: 2px solid rgb(0, 162, 255);
     }
     .chart-panel{
         height: 545px; border: 0.1px solid rgb(146, 146, 146);

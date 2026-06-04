@@ -84,7 +84,7 @@ const log = console.log;
 
 const chartProperties = {
     layout: {
-        background: { color: '#000000' },
+        background: { color: '#222222' },
         textColor: '#ffffff',
     },
     grid: {
@@ -166,7 +166,7 @@ const resizeObserver = new ResizeObserver(resizeChart);
 resizeObserver.observe(domElement);
 window.addEventListener("resize", resizeChart);
 
-// Returns interval duration in seconds.
+
 function parseIntervalSecs(interval) {
     const n = parseInt(interval);
     if (interval.endsWith('m')) return n * 60;
@@ -176,11 +176,8 @@ function parseIntervalSecs(interval) {
     return 60;
 }
 
-// Appends `count` more future timestamps starting after futureAnchorTime.
-// Uses update() per point so the series only ever grows rightward.
 function extendFutureWhitespace(fromTimeSec, interval, count = 100) {
     const step = parseIntervalSecs(interval);
-    // If we're resetting (new symbol / timeframe), wipe and restart.
     if (fromTimeSec < futureAnchorTime && fromTimeSec !== 0) {
         whitespaceSeries.setData([]);
         futureAnchorTime = 0;
@@ -193,19 +190,17 @@ function extendFutureWhitespace(fromTimeSec, interval, count = 100) {
     }
 }
 
-// Resets whitespace entirely (call when switching symbol or timeframe).
+
 function resetFutureWhitespace() {
     futureAnchorTime = 0;
     whitespaceSeries.setData([]);
 }
 
-// Dynamically extend when user scrolls near the right edge.
+
 chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
     if (!range || futureAnchorTime === 0) return;
     const step = parseIntervalSecs(currentInterval);
     const edgeTime = futureAnchorTime;
-    // Convert visible right logical index to approximate timestamp.
-    // We extend if the visible right is within 30 bars of the whitespace end.
     const totalBars = chart.timeScale().getVisibleRange();
     if (!totalBars) return;
     const rightTimeSec = totalBars.to;
@@ -214,43 +209,41 @@ chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
     }
 });
 
+const API_BASE = "http://localhost:5000";
+const WS_BASE  = "ws://localhost:5000";
+
 fetchCandles(activeCoin, currentInterval);
 
 function fetchCandles(coin, interval) {
-    fetch(`https://api.binance.com/api/v3/klines?symbol=${coin.symbol}&interval=${interval}&limit=250`)
-        .then(res => res.json())
-        .then(data => {
-            const candles = data.map(c => ({
-                time: Math.floor(c[0] / 1000),
-                open: +c[1],
-                high: +c[2],
-                low: +c[3],
-                close: +c[4]
-            }))
-            .filter((c, i, arr) => i === 0 || c.time !== arr[i - 1].time)
-            .sort((a, b) => a.time - b.time);
+    const url = `${API_BASE}/api/candles?symbol=${coin.symbol}&interval=${interval}&limit=250`;
 
+    fetch(url)
+        .then(res => {
+            if (!res.ok) throw new Error(`API error ${res.status}: ${res.statusText}`);
+            return res.json();
+        })
+        .then(candles => {
             candleSeries.setData(candles);
 
-            // Seed future timestamps so the time axis extends past the last candle.
             const lastTime = candles[candles.length - 1].time;
             extendFutureWhitespace(lastTime, interval);
 
             connectChartWebSocket(coin, interval);
         })
-        .catch(err => console.error(err));
+        .catch(err => {
+            console.error("[Rapid Terminal] Failed to fetch candles:", err);
+            console.warn("Make sure the Python server is running: python server.py");
+        });
 }
 
 function connectWebSocket(coin, index) {
-    const stream = coin.symbol.toLowerCase() + "@kline_1m";
-    const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${stream}`);
+    const ws = new WebSocket(`${WS_BASE}/ws/ticker/${coin.symbol.toLowerCase()}`);
 
     ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        const k = msg.k;
+        const data = JSON.parse(event.data);
 
-        coin.price = parseFloat(k.c).toFixed(2);
-        coin.change = parseFloat(((k.c - k.o) / k.o * 100).toFixed(2));
+        coin.price  = data.price;
+        coin.change = data.change;
 
         const card = document.querySelectorAll(".coin-card")[index];
         card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
@@ -267,26 +260,21 @@ function connectChartWebSocket(coin, interval) {
         chartWs.close();
     }
 
-    const stream = coin.symbol.toLowerCase() + `@kline_${interval}`;
-    chartWs = new WebSocket(`wss://stream.binance.com:9443/ws/${stream}`);
+    chartWs = new WebSocket(`${WS_BASE}/ws/chart/${coin.symbol.toLowerCase()}/${interval}`);
 
     chartWs.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        const k = msg.k;
+        const candle = JSON.parse(event.data);
 
-        const candle = {
-            time: Math.floor(k.t / 1000),
-            open: parseFloat(k.o),
-            high: parseFloat(k.h),
-            low: parseFloat(k.l),
-            close: parseFloat(k.c),
-        };
+        candleSeries.update({
+            time:  candle.time,
+            open:  candle.open,
+            high:  candle.high,
+            low:   candle.low,
+            close: candle.close,
+        });
 
-        candleSeries.update(candle);
-
-        // When a candle closes, roll the future window forward by one slot.
-        if (k.x) {
-            extendFutureWhitespace(candle.time, interval);
+        if (candle.closed) {
+            extendFutureWhitespace(candle.time, currentInterval);
         }
     };
 }
