@@ -1,7 +1,9 @@
+const logo = document.querySelector(".website-logo");
+
 const coins = [
-  { pair: "BTC/USDT", symbol: "BTCUSDT", price: 0, change: 0 },
-  { pair: "ETH/USDT", symbol: "ETHUSDT", price: 0, change: 0 },
-  { pair: "SOL/USDT", symbol: "SOLUSDT", price: 0, change: 0 },
+    { pair: "BTC/USDT", symbol: "BTCUSDT", price: 0, change: 0 },
+    { pair: "ETH/USDT", symbol: "ETHUSDT", price: 0, change: 0 },
+    { pair: "SOL/USDT", symbol: "SOLUSDT", price: 0, change: 0 },
 ];
 
 let currentInterval = "15m";
@@ -16,7 +18,7 @@ coins.forEach((coin, index) => {
     card.classList.add("coin-card");
     if (index === 0) card.classList.add("active-coin");
     card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
-  
+
     card.addEventListener("click", () => {
         document.querySelectorAll(".coin-card").forEach(c => c.classList.remove("active-coin"));
         card.classList.add("active-coin");
@@ -25,7 +27,7 @@ coins.forEach((coin, index) => {
         resetFutureWhitespace();
         fetchCandles(activeCoin, currentInterval);
     });
-  
+
     ticker.appendChild(card);
 
     selectedToken.textContent = document.querySelector(".active-coin").textContent;
@@ -220,7 +222,25 @@ chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
 });
 
 const API_BASE = "http://localhost:5000";
-const WS_BASE  = "ws://localhost:5000";
+const WS_BASE = "ws://localhost:5000";
+
+async function checkServer() {
+    try {
+        const response = await fetch(`${API_BASE}/health`);
+
+        if (!response.ok) {
+            throw new Error();
+        }
+
+        logo.style.color = "#00d459ff";
+
+    } catch {
+        logo.style.color = "#f13639ff";
+    }
+}
+
+checkServer();
+setInterval(checkServer, 5000);
 
 fetchCandles(activeCoin, currentInterval);
 
@@ -289,7 +309,7 @@ function fetchCandlesBefore(coin, interval) {
             // Build a combined deduplicated array using our local candleData cache
             const allByTime = new Map();
             for (const c of olderCandles) allByTime.set(c.time, c);
-            for (const c of candleData)    allByTime.set(c.time, c);
+            for (const c of candleData) allByTime.set(c.time, c);
 
             const merged = [...allByTime.values()].sort((a, b) => a.time - b.time);
 
@@ -321,7 +341,7 @@ function connectWebSocket(coin, index) {
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
-        coin.price  = data.price;
+        coin.price = data.price;
         coin.change = data.change;
 
         const card = document.querySelectorAll(".coin-card")[index];
@@ -345,10 +365,10 @@ function connectChartWebSocket(coin, interval) {
         const candle = JSON.parse(event.data);
 
         candleSeries.update({
-            time:  candle.time,
-            open:  candle.open,
-            high:  candle.high,
-            low:   candle.low,
+            time: candle.time,
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
             close: candle.close,
         });
 

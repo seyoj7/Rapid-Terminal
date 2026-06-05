@@ -25,7 +25,6 @@ async def lifespan(app: FastAPI):
     for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "websockets", "websockets.client", "websockets.server"):
         logging.getLogger(logger_name).addFilter(WebSocketLogFilter())
         
-    print("Candles and Chart streams are ready!")
     yield
 
 app = FastAPI(title="Rapid Terminal API", version="1.0.0", lifespan=lifespan)
