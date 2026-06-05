@@ -1,20 +1,34 @@
-"""
-server.py – Rapid Terminal Python API backend
-Proxies Binance REST and WebSocket data to the frontend.
-
-Run with:
-    python server.py
-"""
-
-import asyncio
 import json
+import logging
+import httpx
 import uvicorn
 import websockets
-from fastapi import FastAPI, Query, HTTPException, WebSocket, WebSocketDisconnect
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-import httpx
 
-app = FastAPI(title="Rapid Terminal API", version="1.0.0")
+class WebSocketLogFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if "WebSocket" in msg and "[accepted]" in msg:
+            return False
+        if msg in ("connection open", "connection closed", "connection closed normally"):
+            return False
+        return True
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logging.getLogger("websockets").setLevel(logging.WARNING)
+    logging.getLogger("websockets.client").setLevel(logging.WARNING)
+    logging.getLogger("websockets.server").setLevel(logging.WARNING)
+    
+    for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "websockets", "websockets.client", "websockets.server"):
+        logging.getLogger(logger_name).addFilter(WebSocketLogFilter())
+        
+    print("Candles and Chart streams are ready!")
+    yield
+
+app = FastAPI(title="Rapid Terminal API", version="1.0.0", lifespan=lifespan)
 
 # Allow the browser (any origin while running locally) to call this server.
 app.add_middleware(
@@ -42,6 +56,7 @@ async def get_candles(
     Fetch OHLC candlestick data from Binance and return it in
     LightweightCharts-compatible format: { time, open, high, low, close }
     """
+    
     url = f"{BINANCE_BASE}/klines"
     params = {"symbol": symbol.upper(), "interval": interval, "limit": limit}
 
@@ -98,6 +113,7 @@ async def chart_websocket(websocket: WebSocket, symbol: str, interval: str):
     Sends: { time, open, high, low, close, closed }
     `closed` is True when a candle finalises so JS can extend future whitespace.
     """
+    
     await websocket.accept()
     stream = f"{symbol.lower()}@kline_{interval}"
     url = f"{BINANCE_WS}/{stream}"
@@ -172,5 +188,5 @@ async def health():
 
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="localhost", port=5000, reload=True)
+    uvicorn.run("server:app", host="localhost", port=5000, reload=True, access_log=False)
 

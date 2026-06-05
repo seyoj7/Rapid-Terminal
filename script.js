@@ -33,18 +33,6 @@ coins.forEach((coin, index) => {
 
 const navOptions = document.querySelectorAll(".nav-option");
 
-navOptions.forEach(card => {
-    card.addEventListener("click", () => {
-
-        navOptions.forEach(item => {
-            item.classList.remove("active-option");
-        });
-
-        card.classList.add("active-option");
-
-    });
-});
-
 const timeframes = document.querySelectorAll(".timeframe");
 
 timeframes.forEach(frame => {
@@ -79,8 +67,6 @@ navOptions.forEach(item => {
 
     });
 });
-
-const log = console.log;
 
 const chartProperties = {
     layout: {
