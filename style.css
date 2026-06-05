@@ -71,6 +71,29 @@ body {
     border-bottom: 2px solid rgb(239, 68, 68);
 }
 
+.chart-api {
+    display: flex;
+    gap: 6px;
+    padding: 5px;
+    margin-left: auto;
+    border-left: 1px solid rgb(121, 121, 121);
+}
+
+.binance-chart {
+    padding: 2px;
+    cursor: pointer;
+    border: 1px solid rgb(100, 100, 100);
+    border-color: rgb(0, 162, 255);
+    background: rgba(0, 162, 255, 0.15);
+    border-radius: 2px;
+}
+
+.hype-chart {
+    padding: 2px;
+    cursor: pointer;
+    border: 1px solid rgb(100, 100, 100);
+}
+
 .nav-section {
     height: 32px;
     border-bottom: 1px solid rgb(126, 126, 126);
