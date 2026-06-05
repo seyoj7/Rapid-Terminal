@@ -67,6 +67,10 @@ body {
     border-bottom: 2px solid rgb(26, 199, 141);
 }
 
+.active-coin.active-coin-negative {
+    border-bottom: 2px solid rgb(239, 68, 68);
+}
+
 .nav-section {
     height: 32px;
     border-bottom: 1px solid rgb(126, 126, 126);

@@ -232,7 +232,7 @@ async function checkServer() {
             throw new Error();
         }
 
-        logo.style.color = "#00d459ff";
+        logo.style.color = "#1bdf9dff";
 
     } catch {
         logo.style.color = "#f13639ff";
@@ -346,6 +346,8 @@ function connectWebSocket(coin, index) {
 
         const card = document.querySelectorAll(".coin-card")[index];
         card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
+
+        card.classList.toggle("active-coin-negative", coin.change < 0);
 
         const activeIndex = [...document.querySelectorAll(".coin-card")].findIndex(c => c.classList.contains("active-coin"));
         if (activeIndex === index) {
