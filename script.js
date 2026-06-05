@@ -140,6 +140,22 @@ const whitespaceSeries = chart.addLineSeries({
 let chartWs = null;
 let futureAnchorTime = 0;
 
+// Local cache of all loaded candle data (LightweightCharts v4 has no public .data() API)
+let candleData = [];
+
+// Historical loading state
+let oldestCandleTimeSec = 0;   // Unix seconds of the earliest loaded candle
+let isLoadingHistory = false;   // guard against parallel fetches
+let hasMoreHistory = true;      // set to false once Binance returns < limit
+let historyInterval = "15m";   // interval being loaded (reset on coin/interval change)
+let historyCoin = null;         // coin being loaded
+
+/** Set the candle series data and keep the local cache in sync. */
+function setCandleData(candles) {
+    candleData = candles;
+    candleSeries.setData(candles);
+}
+
 const resizeChart = () => {
     const width = domElement.clientWidth;
     const height = domElement.clientHeight;
@@ -184,14 +200,22 @@ function resetFutureWhitespace() {
 
 
 chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-    if (!range || futureAnchorTime === 0) return;
-    const step = parseIntervalSecs(currentInterval);
-    const edgeTime = futureAnchorTime;
-    const totalBars = chart.timeScale().getVisibleRange();
-    if (!totalBars) return;
-    const rightTimeSec = totalBars.to;
-    if (typeof rightTimeSec === 'number' && edgeTime - rightTimeSec < step * 30) {
-        extendFutureWhitespace(futureAnchorTime, currentInterval, 100);
+    // Extend future whitespace when scrolling right
+    if (range && futureAnchorTime !== 0) {
+        const step = parseIntervalSecs(currentInterval);
+        const edgeTime = futureAnchorTime;
+        const totalBars = chart.timeScale().getVisibleRange();
+        if (totalBars) {
+            const rightTimeSec = totalBars.to;
+            if (typeof rightTimeSec === 'number' && edgeTime - rightTimeSec < step * 30) {
+                extendFutureWhitespace(futureAnchorTime, currentInterval, 100);
+            }
+        }
+    }
+
+    // Load older history when scrolling left (logical range goes negative)
+    if (range && range.from < 10 && hasMoreHistory && !isLoadingHistory) {
+        fetchCandlesBefore(historyCoin, historyInterval);
     }
 });
 
@@ -203,24 +227,91 @@ fetchCandles(activeCoin, currentInterval);
 function fetchCandles(coin, interval) {
     const url = `${API_BASE}/api/candles?symbol=${coin.symbol}&interval=${interval}&limit=250`;
 
+    // Reset history state for the new coin/interval
+    isLoadingHistory = false;
+    hasMoreHistory = true;
+    oldestCandleTimeSec = 0;
+    historyCoin = coin;
+    historyInterval = interval;
+
     fetch(url)
         .then(res => {
             if (!res.ok) throw new Error(`API error ${res.status}: ${res.statusText}`);
             return res.json();
         })
         .then(candles => {
-            candleSeries.setData(candles);
+            setCandleData(candles);
 
             chart.priceScale('right').applyOptions({ autoScale: true });
 
-            const lastTime = candles[candles.length - 1].time;
-            extendFutureWhitespace(lastTime, interval);
+            if (candles.length > 0) {
+                oldestCandleTimeSec = candles[0].time;
+                const lastTime = candles[candles.length - 1].time;
+                extendFutureWhitespace(lastTime, interval);
+            }
+
+            // Mark exhausted if Binance returned fewer bars than we asked for
+            if (candles.length < 250) hasMoreHistory = false;
 
             connectChartWebSocket(coin, interval);
         })
         .catch(err => {
             console.error("[Rapid Terminal] Failed to fetch candles:", err);
             console.warn("Make sure the Python server is running: python server.py");
+        });
+}
+
+/**
+ * Fetch an older page of candles (before the oldest we already have)
+ * and prepend them to the candleSeries without losing the current view.
+ */
+function fetchCandlesBefore(coin, interval) {
+    if (!coin || isLoadingHistory || !hasMoreHistory || oldestCandleTimeSec === 0) return;
+
+    isLoadingHistory = true;
+
+    // endTime must be strictly before the oldest candle open-time (in ms)
+    const endTimeMs = oldestCandleTimeSec * 1000 - 1;
+    const url = `${API_BASE}/api/candles?symbol=${coin.symbol}&interval=${interval}&limit=250&end_time=${endTimeMs}`;
+
+    fetch(url)
+        .then(res => {
+            if (!res.ok) throw new Error(`API error ${res.status}: ${res.statusText}`);
+            return res.json();
+        })
+        .then(olderCandles => {
+            if (olderCandles.length === 0) {
+                hasMoreHistory = false;
+                return;
+            }
+
+            // Merge: older page first, then existing series data
+            // Build a combined deduplicated array using our local candleData cache
+            const allByTime = new Map();
+            for (const c of olderCandles) allByTime.set(c.time, c);
+            for (const c of candleData)    allByTime.set(c.time, c);
+
+            const merged = [...allByTime.values()].sort((a, b) => a.time - b.time);
+
+            // Preserve the current scroll position
+            const visibleRange = chart.timeScale().getVisibleRange();
+
+            setCandleData(merged);
+
+            if (visibleRange) {
+                chart.timeScale().setVisibleRange(visibleRange);
+            }
+
+            oldestCandleTimeSec = merged[0].time;
+
+            // If Binance returned fewer than requested, we're at the start of history
+            if (olderCandles.length < 250) hasMoreHistory = false;
+        })
+        .catch(err => {
+            console.error("[Rapid Terminal] Failed to fetch historical candles:", err);
+        })
+        .finally(() => {
+            isLoadingHistory = false;
         });
 }
 

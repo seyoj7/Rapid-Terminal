@@ -51,14 +51,18 @@ async def get_candles(
     symbol: str = Query(..., description="Trading pair symbol, e.g. BTCUSDT"),
     interval: str = Query("15m", description="Kline interval, e.g. 1m 5m 15m 1h 4h 1d 1w"),
     limit: int = Query(250, ge=1, le=1000, description="Number of candles to return"),
+    end_time: int = Query(None, description="Fetch candles ending before this Unix timestamp (ms). Used for paginating backwards."),
 ):
     """
     Fetch OHLC candlestick data from Binance and return it in
-    LightweightCharts-compatible format: { time, open, high, low, close }
+    LightweightCharts-compatible format: { time, open, high, low, close }.
+    Pass `end_time` (Unix ms) to load older history pages.
     """
     
     url = f"{BINANCE_BASE}/klines"
     params = {"symbol": symbol.upper(), "interval": interval, "limit": limit}
+    if end_time is not None:
+        params["endTime"] = end_time
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
@@ -148,23 +152,24 @@ async def chart_websocket(websocket: WebSocket, symbol: str, interval: str):
 @app.websocket("/ws/ticker/{symbol}")
 async def ticker_websocket(websocket: WebSocket, symbol: str):
     """
-    Bridges the browser to the Binance 1-minute kline stream for a coin ticker.
+    Bridges the browser to the Binance 24-hour miniTicker stream for a coin ticker.
     Sends: { price, change }
+    `change` is the true 24-hour percentage change (close vs. 24h open price).
     """
     await websocket.accept()
-    stream = f"{symbol.lower()}@kline_1m"
+    stream = f"{symbol.lower()}@miniTicker"
     url = f"{BINANCE_WS}/{stream}"
 
     try:
         async with websockets.connect(url) as binance_ws:
             async for raw in binance_ws:
                 msg = json.loads(raw)
-                k = msg["k"]
-                close = float(k["c"])
-                open_ = float(k["o"])
+                # miniTicker fields: c = last price, o = 24h open price
+                close = float(msg["c"])
+                open_ = float(msg["o"])   # 24-hour rolling open — not session open
                 change = round((close - open_) / open_ * 100, 2)
                 ticker = {
-                    "price":  f"{close:.2f}",
+                    "price":  f"{close:,.2f}",
                     "change": change,
                 }
                 try:
