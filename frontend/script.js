@@ -164,6 +164,15 @@ const chart = LightweightCharts.createChart(domElement, {
 });
 const candleSeries = chart.addCandlestickSeries();
 
+const autoScaleBtn = document.getElementById('auto-scale-btn');
+if (autoScaleBtn) {
+    autoScaleBtn.addEventListener('click', () => {
+        chart.priceScale('right').applyOptions({ autoScale: true });
+    });
+}
+
+
+
 const whitespaceSeries = chart.addLineSeries({
     color: 'transparent',
     lineWidth: 0,
@@ -174,6 +183,7 @@ const whitespaceSeries = chart.addLineSeries({
 });
 
 let chartWs = null;
+let currentCandle = null;
 let futureAnchorTime = 0;
 
 // Local cache of all loaded candle data (LightweightCharts v4 has no public .data() API)
@@ -186,10 +196,39 @@ let hasMoreHistory = true;      // set to false once Binance returns < limit
 let historyInterval = "15m";   // interval being loaded (reset on coin/interval change)
 let historyCoin = null;         // coin being loaded
 
-/** Set the candle series data and keep the local cache in sync. */
+let cornerObserver = null;
+
+function syncAutoBtn() {
+    const autoBtn = document.getElementById('auto-scale-btn');
+    if (!autoBtn) return;
+    const table = domElement.querySelector('table');
+    if (table) {
+        const rows = table.querySelectorAll('tr');
+        if (rows.length > 1) {
+            const cornerCell = rows[rows.length - 1].lastElementChild;
+            if (cornerCell) {
+                const w = cornerCell.offsetWidth || cornerCell.clientWidth;
+                const h = (cornerCell.offsetHeight || cornerCell.clientHeight) + 1;
+                if (w > 0 && h > 0) {
+                    autoBtn.style.width = w + 'px';
+                    autoBtn.style.height = h + 'px';
+                }
+
+                if (!cornerObserver || cornerObserver._target !== cornerCell) {
+                    if (cornerObserver) cornerObserver.disconnect();
+                    cornerObserver = new ResizeObserver(() => syncAutoBtn());
+                    cornerObserver.observe(cornerCell);
+                    cornerObserver._target = cornerCell;
+                }
+            }
+        }
+    }
+}
+
 function setCandleData(candles) {
     candleData = candles;
     candleSeries.setData(candles);
+    syncAutoBtn();
 }
 
 const resizeChart = () => {
@@ -197,11 +236,13 @@ const resizeChart = () => {
     const height = domElement.clientHeight;
     if (width > 0 && height > 0) {
         chart.resize(width, height);
+        syncAutoBtn();
     }
 };
 
 const resizeObserver = new ResizeObserver(resizeChart);
 resizeObserver.observe(domElement);
+syncAutoBtn();
 
 
 function parseIntervalSecs(interval) {
@@ -292,6 +333,8 @@ function fetchCandles(coin, interval) {
         chartWs = null;
     }
 
+    currentCandle = null;
+
     fetch(url)
         .then(res => {
             if (!res.ok) throw new Error(`API error ${res.status}: ${res.statusText}`);
@@ -302,6 +345,10 @@ function fetchCandles(coin, interval) {
             if (activeCoin.symbol !== coin.symbol || currentInterval !== interval) return;
 
             setCandleData(candles);
+
+            if (candles.length > 0) {
+                currentCandle = { ...candles[candles.length - 1] };
+            }
 
             chart.priceScale('right').applyOptions({ autoScale: true });
 
@@ -405,7 +452,7 @@ function connectWebSocket(coin, index) {
     };
 }
 
-let currentCandle = null;
+
 
 function connectChartWebSocket(coin, interval) {
     if (chartWs) {
