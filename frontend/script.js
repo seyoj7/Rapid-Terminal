@@ -7,11 +7,36 @@ const coins = [
 ];
 
 let currentInterval = "15m";
+let currentExchange = "binance";
 let activeCoin = coins[0];
 
 const selectedToken = document.querySelector(".selected-token");
 
 const ticker = document.querySelector(".market-ticker");
+
+const binanceChartBtn = document.querySelector(".binance-chart");
+const hypeChartBtn = document.querySelector(".hype-chart");
+binanceChartBtn.classList.add("active-exchange");
+
+function switchExchange(exchange) {
+    if (currentExchange === exchange) return;
+    currentExchange = exchange;
+
+    if (exchange === "binance") {
+        binanceChartBtn.classList.add("active-exchange");
+        hypeChartBtn.classList.remove("active-exchange");
+    } else {
+        hypeChartBtn.classList.add("active-exchange");
+        binanceChartBtn.classList.remove("active-exchange");
+    }
+
+    initPrices();
+    resetFutureWhitespace();
+    fetchCandles(activeCoin, currentInterval);
+}
+
+binanceChartBtn.addEventListener("click", () => switchExchange("binance"));
+hypeChartBtn.addEventListener("click", () => switchExchange("hype"));
 
 coins.forEach((coin, index) => {
     const card = document.createElement("div");
@@ -76,8 +101,8 @@ const chartProperties = {
         textColor: '#ffffff',
     },
     grid: {
-        vertLines: { color: 'rgba(255, 255, 255, 0)' },
-        horzLines: { color: 'rgba(255, 255, 255, 0)' },
+        vertLines: { color: 'rgba(46, 46, 46, 1)' },
+        horzLines: { color: 'rgba(46, 46, 46, 1)' },
     },
     rightPriceScale: {
         visible: true,
@@ -100,6 +125,12 @@ const chartProperties = {
         borderColor: 'rgba(255, 255, 255, 0.1)',
     },
     localization: {
+        priceFormatter: (price) => {
+            return new Intl.NumberFormat('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            }).format(price);
+        },
         timeFormatter: (timestamp) => {
             const isIntraday = currentInterval.endsWith('m') || currentInterval.endsWith('h');
             const date = new Date(timestamp * 1000);
@@ -119,6 +150,9 @@ const chartProperties = {
                 day: '2-digit',
             }).format(date);
         },
+    },
+    crosshair: {
+        mode: 0,
     },
 }
 
@@ -168,7 +202,6 @@ const resizeChart = () => {
 
 const resizeObserver = new ResizeObserver(resizeChart);
 resizeObserver.observe(domElement);
-window.addEventListener("resize", resizeChart);
 
 
 function parseIntervalSecs(interval) {
@@ -245,7 +278,7 @@ setInterval(checkServer, 5000);
 fetchCandles(activeCoin, currentInterval);
 
 function fetchCandles(coin, interval) {
-    const url = `${API_BASE}/api/candles?symbol=${coin.symbol}&interval=${interval}&limit=250`;
+    const url = `${API_BASE}/api/candles?exchange=${currentExchange}&symbol=${coin.symbol}&interval=${interval}&limit=250`;
 
     // Reset history state for the new coin/interval
     isLoadingHistory = false;
@@ -254,12 +287,20 @@ function fetchCandles(coin, interval) {
     historyCoin = coin;
     historyInterval = interval;
 
+    if (chartWs) {
+        chartWs.close();
+        chartWs = null;
+    }
+
     fetch(url)
         .then(res => {
             if (!res.ok) throw new Error(`API error ${res.status}: ${res.statusText}`);
             return res.json();
         })
         .then(candles => {
+            // Guard against network race conditions if user clicked a new coin while this was loading
+            if (activeCoin.symbol !== coin.symbol || currentInterval !== interval) return;
+
             setCandleData(candles);
 
             chart.priceScale('right').applyOptions({ autoScale: true });
@@ -292,7 +333,7 @@ function fetchCandlesBefore(coin, interval) {
 
     // endTime must be strictly before the oldest candle open-time (in ms)
     const endTimeMs = oldestCandleTimeSec * 1000 - 1;
-    const url = `${API_BASE}/api/candles?symbol=${coin.symbol}&interval=${interval}&limit=250&end_time=${endTimeMs}`;
+    const url = `${API_BASE}/api/candles?exchange=${currentExchange}&symbol=${coin.symbol}&interval=${interval}&limit=250&end_time=${endTimeMs}`;
 
     fetch(url)
         .then(res => {
@@ -335,14 +376,22 @@ function fetchCandlesBefore(coin, interval) {
         });
 }
 
+const tickerWsMap = new Map();
+
 function connectWebSocket(coin, index) {
-    const ws = new WebSocket(`${WS_BASE}/ws/ticker/${coin.symbol.toLowerCase()}`);
+    if (tickerWsMap.has(coin.symbol)) {
+        tickerWsMap.get(coin.symbol).close();
+    }
+    const ws = new WebSocket(`${WS_BASE}/ws/ticker/${currentExchange}/${coin.symbol.toLowerCase()}`);
+    tickerWsMap.set(coin.symbol, ws);
 
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
         coin.price = data.price;
-        coin.change = data.change;
+        if (data.change !== undefined) {
+            coin.change = data.change;
+        }
 
         const card = document.querySelectorAll(".coin-card")[index];
         card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
@@ -363,7 +412,7 @@ function connectChartWebSocket(coin, interval) {
         chartWs.close();
     }
 
-    chartWs = new WebSocket(`${WS_BASE}/ws/chart/${coin.symbol.toLowerCase()}/${interval}`);
+    chartWs = new WebSocket(`${WS_BASE}/ws/chart/${currentExchange}/${coin.symbol.toLowerCase()}/${interval}`);
 
     chartWs.onmessage = (event) => {
         const data = JSON.parse(event.data);
@@ -387,39 +436,26 @@ function connectChartWebSocket(coin, interval) {
                 if (data.price < currentCandle.low) currentCandle.low = data.price;
                 candleSeries.update(currentCandle);
             }
-        } else if (!data.type) {
-            // Fallback for old format
-            currentCandle = {
-                time: data.time,
-                open: data.open,
-                high: data.high,
-                low: data.low,
-                close: data.close,
-            };
-            candleSeries.update(currentCandle);
-            if (data.closed) {
-                extendFutureWhitespace(data.time, currentInterval);
-            }
         }
     };
 }
 
 async function initPrices() {
     try {
-        const response = await fetch(`${API_BASE}/api/prices`);
+        const response = await fetch(`${API_BASE}/api/prices?exchange=${currentExchange}`);
         if (!response.ok) return;
         const initialPrices = await response.json();
-        
+
         coins.forEach((coin, index) => {
             const data = initialPrices[coin.symbol];
             if (data) {
                 coin.price = data.price;
                 coin.change = data.change;
-                
+
                 const card = document.querySelectorAll(".coin-card")[index];
                 card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
                 card.classList.toggle("active-coin-negative", coin.change < 0);
-                
+
                 const activeIndex = [...document.querySelectorAll(".coin-card")].findIndex(c => c.classList.contains("active-coin"));
                 if (activeIndex === index) {
                     selectedToken.textContent = card.textContent;
