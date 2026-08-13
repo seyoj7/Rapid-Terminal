@@ -15,6 +15,10 @@ body {
     background: black;
     color: white;
     font-family: monospace;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
 }
 
 .website-logo {
@@ -94,6 +98,17 @@ body {
     border: 1px solid rgb(100, 100, 100);
 }
 
+.zones-btn {
+    background: transparent;
+    color: white;
+    border: 1px solid rgb(126, 126, 126);
+    padding: 2px 6px;
+    border-color: rgb(0, 162, 255);
+    cursor: pointer;
+    border-radius: 2px;
+    margin-right: 5px;
+}
+
 .nav-section {
     height: 32px;
     border-bottom: 1px solid rgb(126, 126, 126);
@@ -118,12 +133,13 @@ body {
 }
 
 .chart-panel {
-    height: 545px;
+    flex: 2;
     border: 0.1px solid rgb(146, 146, 146);
     border-radius: 5px;
     margin-top: 1px;
     display: flex;
     flex-direction: column;
+    min-height: 0;
 }
 
 .chart-header {
@@ -142,6 +158,7 @@ body {
 .timeframes {
     display: flex;
     padding: 5px;
+    margin-right: -10px;
 }
 
 .timeframe {
@@ -155,10 +172,13 @@ body {
 }
 
 .nav-panel {
-    height: 300px;
+    flex: 1;
     border: 1px solid rgb(146, 146, 146);
     border-radius: 5px;
     margin-top: 1px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 
 .nav-panel-header {
@@ -175,8 +195,9 @@ body {
 }
 
 .navtv {
-    height: calc(100% - 30px);
+    flex: 1;
     border-radius: 5px;
+    min-height: 0;
 }
 
 .tvchart {

@@ -221,8 +221,8 @@ chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
     }
 });
 
-const API_BASE = "http://localhost:5000";
-const WS_BASE = "ws://localhost:5000";
+const API_BASE = window.location.origin;
+const WS_BASE = window.location.origin.replace(/^http/, "ws");
 
 async function checkServer() {
     try {
@@ -356,6 +356,8 @@ function connectWebSocket(coin, index) {
     };
 }
 
+let currentCandle = null;
+
 function connectChartWebSocket(coin, interval) {
     if (chartWs) {
         chartWs.close();
@@ -364,20 +366,71 @@ function connectChartWebSocket(coin, interval) {
     chartWs = new WebSocket(`${WS_BASE}/ws/chart/${coin.symbol.toLowerCase()}/${interval}`);
 
     chartWs.onmessage = (event) => {
-        const candle = JSON.parse(event.data);
+        const data = JSON.parse(event.data);
 
-        candleSeries.update({
-            time: candle.time,
-            open: candle.open,
-            high: candle.high,
-            low: candle.low,
-            close: candle.close,
-        });
-
-        if (candle.closed) {
-            extendFutureWhitespace(candle.time, currentInterval);
+        if (data.type === "kline") {
+            currentCandle = {
+                time: data.time,
+                open: data.open,
+                high: data.high,
+                low: data.low,
+                close: data.close,
+            };
+            candleSeries.update(currentCandle);
+            if (data.closed) {
+                extendFutureWhitespace(data.time, currentInterval);
+            }
+        } else if (data.type === "trade") {
+            if (currentCandle) {
+                currentCandle.close = data.price;
+                if (data.price > currentCandle.high) currentCandle.high = data.price;
+                if (data.price < currentCandle.low) currentCandle.low = data.price;
+                candleSeries.update(currentCandle);
+            }
+        } else if (!data.type) {
+            // Fallback for old format
+            currentCandle = {
+                time: data.time,
+                open: data.open,
+                high: data.high,
+                low: data.low,
+                close: data.close,
+            };
+            candleSeries.update(currentCandle);
+            if (data.closed) {
+                extendFutureWhitespace(data.time, currentInterval);
+            }
         }
     };
 }
 
-coins.forEach((coin, index) => connectWebSocket(coin, index));
+async function initPrices() {
+    try {
+        const response = await fetch(`${API_BASE}/api/prices`);
+        if (!response.ok) return;
+        const initialPrices = await response.json();
+        
+        coins.forEach((coin, index) => {
+            const data = initialPrices[coin.symbol];
+            if (data) {
+                coin.price = data.price;
+                coin.change = data.change;
+                
+                const card = document.querySelectorAll(".coin-card")[index];
+                card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
+                card.classList.toggle("active-coin-negative", coin.change < 0);
+                
+                const activeIndex = [...document.querySelectorAll(".coin-card")].findIndex(c => c.classList.contains("active-coin"));
+                if (activeIndex === index) {
+                    selectedToken.textContent = card.textContent;
+                }
+            }
+            connectWebSocket(coin, index);
+        });
+    } catch (e) {
+        console.error("Failed to fetch initial prices", e);
+        coins.forEach((coin, index) => connectWebSocket(coin, index));
+    }
+}
+
+initPrices();

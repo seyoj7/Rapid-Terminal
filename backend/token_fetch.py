@@ -1,41 +1,9 @@
 import json
-import logging
 import httpx
-import uvicorn
 import websockets
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 
-class WebSocketLogFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        msg = record.getMessage()
-        if "WebSocket" in msg and "[accepted]" in msg:
-            return False
-        if msg in ("connection open", "connection closed", "connection closed normally"):
-            return False
-        return True
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logging.getLogger("websockets").setLevel(logging.WARNING)
-    logging.getLogger("websockets.client").setLevel(logging.WARNING)
-    logging.getLogger("websockets.server").setLevel(logging.WARNING)
-    
-    for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "websockets", "websockets.client", "websockets.server"):
-        logging.getLogger(logger_name).addFilter(WebSocketLogFilter())
-        
-    yield
-
-app = FastAPI(title="Rapid Terminal API", version="1.0.0", lifespan=lifespan)
-
-# Allow the browser (any origin while running locally) to call this server.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["GET"],
-    allow_headers=["*"],
-)
+router = APIRouter()
 
 BINANCE_BASE  = "https://api.binance.com/api/v3"
 BINANCE_WS    = "wss://stream.binance.com:9443/ws"
@@ -45,7 +13,7 @@ BINANCE_WS    = "wss://stream.binance.com:9443/ws"
 # REST – Initial candle snapshot
 # ---------------------------------------------------------------------------
 
-@app.get("/api/candles")
+@router.get("/api/candles")
 async def get_candles(
     symbol: str = Query(..., description="Trading pair symbol, e.g. BTCUSDT"),
     interval: str = Query("15m", description="Kline interval, e.g. 1m 5m 15m 1h 4h 1d 1w"),
@@ -84,11 +52,12 @@ async def get_candles(
     # Binance format: [openTime, open, high, low, close, volume, ...]
     candles = [
         {
-            "time":  int(k[0]) // 1000,   # ms → seconds (Unix timestamp)
-            "open":  float(k[1]),
-            "high":  float(k[2]),
-            "low":   float(k[3]),
-            "close": float(k[4]),
+            "time":   int(k[0]) // 1000,   # ms → seconds (Unix timestamp)
+            "open":   float(k[1]),
+            "high":   float(k[2]),
+            "low":    float(k[3]),
+            "close":  float(k[4]),
+            "volume": float(k[5]),
         }
         for k in raw
     ]
@@ -109,35 +78,54 @@ async def get_candles(
 # WebSocket – Live chart candle updates
 # ---------------------------------------------------------------------------
 
-@app.websocket("/ws/chart/{symbol}/{interval}")
+@router.websocket("/ws/chart/{symbol}/{interval}")
 async def chart_websocket(websocket: WebSocket, symbol: str, interval: str):
     """
-    Bridges the browser to the Binance kline stream for the active chart.
-    Sends: { time, open, high, low, close, closed }
-    `closed` is True when a candle finalises so JS can extend future whitespace.
+    Bridges the browser to the Binance kline and aggTrade streams for the active chart.
+    Sends kline data and real-time trade data to make the chart update fluidly.
     """
-    
     await websocket.accept()
-    stream = f"{symbol.lower()}@kline_{interval}"
-    url = f"{BINANCE_WS}/{stream}"
+    stream_kline = f"{symbol.lower()}@kline_{interval}"
+    stream_trade = f"{symbol.lower()}@aggTrade"
+    url = f"wss://stream.binance.com:9443/stream?streams={stream_kline}/{stream_trade}"
 
     try:
         async with websockets.connect(url) as binance_ws:
             async for raw in binance_ws:
                 msg = json.loads(raw)
-                k = msg["k"]
-                candle = {
-                    "time":   int(k["t"]) // 1000,
-                    "open":   float(k["o"]),
-                    "high":   float(k["h"]),
-                    "low":    float(k["l"]),
-                    "close":  float(k["c"]),
-                    "closed": bool(k["x"]),   # True when candle closes
-                }
-                try:
-                    await websocket.send_json(candle)
-                except (WebSocketDisconnect, Exception):
-                    break
+                
+                # Multiplexed payload wrapper
+                if "stream" not in msg:
+                    continue
+                    
+                stream_name = msg["stream"]
+                data = msg["data"]
+                
+                if stream_name == stream_kline:
+                    k = data["k"]
+                    candle = {
+                        "type":   "kline",
+                        "time":   int(k["t"]) // 1000,
+                        "open":   float(k["o"]),
+                        "high":   float(k["h"]),
+                        "low":    float(k["l"]),
+                        "close":  float(k["c"]),
+                        "volume": float(k["v"]),
+                        "closed": bool(k["x"]),
+                    }
+                    try:
+                        await websocket.send_json(candle)
+                    except (WebSocketDisconnect, Exception):
+                        break
+                elif stream_name == stream_trade:
+                    trade = {
+                        "type":  "trade",
+                        "price": float(data["p"]),
+                    }
+                    try:
+                        await websocket.send_json(trade)
+                    except (WebSocketDisconnect, Exception):
+                        break
     except WebSocketDisconnect:
         pass
     except Exception as exc:
@@ -148,7 +136,7 @@ async def chart_websocket(websocket: WebSocket, symbol: str, interval: str):
 # WebSocket – Live price ticker (used to update coin cards)
 # ---------------------------------------------------------------------------
 
-@app.websocket("/ws/ticker/{symbol}")
+@router.websocket("/ws/ticker/{symbol}")
 async def ticker_websocket(websocket: WebSocket, symbol: str):
     """
     Bridges the browser to the Binance 24-hour miniTicker stream for a coin ticker.
@@ -182,15 +170,30 @@ async def ticker_websocket(websocket: WebSocket, symbol: str):
 
 
 # ---------------------------------------------------------------------------
-# Health check
+# REST – Initial ticker prices
 # ---------------------------------------------------------------------------
 
-@app.get("/health")
-async def health():
-    """Simple health-check endpoint."""
-    return {"status": "ok"}
-
-
-if __name__ == "__main__":
-    uvicorn.run("server:app", host="localhost", port=5000, reload=True, access_log=False)
-
+@router.get("/api/prices")
+async def get_prices():
+    """Fetch initial ticker prices for BTC, ETH, SOL."""
+    url = f"{BINANCE_BASE}/ticker/24hr"
+    symbols = '["BTCUSDT","ETHUSDT","SOLUSDT"]'
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            response = await client.get(url, params={"symbols": symbols})
+            response.raise_for_status()
+        except httpx.HTTPError:
+            return {}
+            
+    data = response.json()
+    result = {}
+    for item in data:
+        sym = item["symbol"]
+        close = float(item["lastPrice"])
+        open_ = float(item["openPrice"])
+        change = round((close - open_) / open_ * 100, 2) if open_ else 0.0
+        result[sym] = {
+            "price": f"{close:,.2f}",
+            "change": change
+        }
+    return result
