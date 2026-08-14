@@ -3,6 +3,7 @@ import time as _time
 import httpx
 import websockets
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+import database
 
 router = APIRouter()
 
@@ -120,7 +121,18 @@ async def get_candles(
             unique_candles.append(c)
 
     unique_candles.sort(key=lambda c: c["time"])
-    return unique_candles
+    
+    # Save to database
+    await database.save_candles_batch(exchange, interval, symbol, unique_candles)
+    
+    # Read from database (returns newest first / descending)
+    db_candles = await database.read_candles(exchange, interval, symbol, limit, end_time)
+    
+    # Reverse to return oldest first (ascending) to keep the API response the same
+    # as expected by lightweight-charts
+    db_candles.reverse()
+    
+    return db_candles
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +173,7 @@ async def chart_websocket(websocket: WebSocket, exchange: str, symbol: str, inte
                             "closed": False,
                         }
                         try:
+                            await database.save_candle(exchange, interval, symbol, candle)
                             await websocket.send_json(candle)
                         except (WebSocketDisconnect, Exception):
                             break
@@ -211,6 +224,7 @@ async def chart_websocket(websocket: WebSocket, exchange: str, symbol: str, inte
                             "closed": bool(k["x"]),
                         }
                         try:
+                            await database.save_candle(exchange, interval, symbol, candle)
                             await websocket.send_json(candle)
                         except (WebSocketDisconnect, Exception):
                             break
