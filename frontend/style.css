@@ -130,6 +130,14 @@ body {
     border-bottom: 2px solid rgb(0, 162, 255);
 }
 
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    gap: 2px;
+}
+
 .chart-panel {
     flex: 2;
     border: 0.1px solid rgb(146, 146, 146);
@@ -138,6 +146,7 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    min-width: 0;
 }
 
 .chart-header {
@@ -177,6 +186,13 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    min-width: 0;
+}
+
+@media (min-width: 1320px) {
+    .main-content {
+        flex-direction: row;
+    }
 }
 
 .nav-panel-header {
@@ -210,8 +226,6 @@ body {
 
 .auto-scale-btn {
     position: absolute;
-    bottom: 0px;
-    right: 0px;
     z-index: 10;
     background: #222222;
     color: rgb(150, 150, 150);

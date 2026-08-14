@@ -1,9 +1,9 @@
 const logo = document.querySelector(".website-logo");
 
 const coins = [
-    { pair: "BTC/USDT", symbol: "BTCUSDT", price: 0, change: 0 },
-    { pair: "ETH/USDT", symbol: "ETHUSDT", price: 0, change: 0 },
-    { pair: "SOL/USDT", symbol: "SOLUSDT", price: 0, change: 0 },
+    { pair: "BTC/USDT", symbol: "BTCUSDT", price: 0, change: 0, priceChange: 0 },
+    { pair: "ETH/USDT", symbol: "ETHUSDT", price: 0, change: 0, priceChange: 0 },
+    { pair: "SOL/USDT", symbol: "SOLUSDT", price: 0, change: 0, priceChange: 0 },
 ];
 
 let currentInterval = "15m";
@@ -11,6 +11,26 @@ let currentExchange = "binance";
 let activeCoin = coins[0];
 
 const selectedToken = document.querySelector(".selected-token");
+
+function formatPriceChange(val) {
+    if (val === undefined || val === null || val === 0) return "";
+    const num = typeof val === "number" ? val : parseFloat(val);
+    if (isNaN(num) || num === 0) return "";
+    const sign = num > 0 ? "+" : "-";
+    const absVal = Math.abs(num).toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+    return `${sign}${absVal}`;
+}
+
+function updateSelectedToken(coin) {
+    if (!coin) return;
+    const changeStr = coin.change > 0 ? `+${coin.change}` : `${coin.change}`;
+    const pChangeStr = formatPriceChange(coin.priceChange);
+    const diffText = pChangeStr ? ` ${pChangeStr} (${changeStr}%)` : ` (${changeStr}%)`;
+    selectedToken.textContent = `${coin.pair} $${coin.price}${diffText}`;
+}
 
 const ticker = document.querySelector(".market-ticker");
 
@@ -42,20 +62,20 @@ coins.forEach((coin, index) => {
     const card = document.createElement("div");
     card.classList.add("coin-card");
     if (index === 0) card.classList.add("active-coin");
-    card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
+    card.textContent = `${coin.pair} $${coin.price}`;
 
     card.addEventListener("click", () => {
         document.querySelectorAll(".coin-card").forEach(c => c.classList.remove("active-coin"));
         card.classList.add("active-coin");
-        selectedToken.textContent = card.textContent;
         activeCoin = coins[index];
+        updateSelectedToken(activeCoin);
         resetFutureWhitespace();
         fetchCandles(activeCoin, currentInterval);
     });
 
     ticker.appendChild(card);
 
-    selectedToken.textContent = document.querySelector(".active-coin").textContent;
+    updateSelectedToken(coins[0]);
 });
 
 const navOptions = document.querySelectorAll(".nav-option");
@@ -207,11 +227,18 @@ function syncAutoBtn() {
         if (rows.length > 1) {
             const cornerCell = rows[rows.length - 1].lastElementChild;
             if (cornerCell) {
-                const w = cornerCell.offsetWidth || cornerCell.clientWidth;
-                const h = (cornerCell.offsetHeight || cornerCell.clientHeight) + 1;
-                if (w > 0 && h > 0) {
-                    autoBtn.style.width = w + 'px';
-                    autoBtn.style.height = h + 'px';
+                const rect = cornerCell.getBoundingClientRect();
+                const containerRect = domElement.getBoundingClientRect();
+                const top = rect.top - containerRect.top;
+                const left = rect.left - containerRect.left;
+
+                if (rect.width > 0 && rect.height > 0) {
+                    autoBtn.style.top = top + 'px';
+                    autoBtn.style.left = left + 'px';
+                    autoBtn.style.width = rect.width + 'px';
+                    autoBtn.style.height = rect.height + 'px';
+                    autoBtn.style.bottom = 'auto';
+                    autoBtn.style.right = 'auto';
                 }
 
                 if (!cornerObserver || cornerObserver._target !== cornerCell) {
@@ -439,15 +466,18 @@ function connectWebSocket(coin, index) {
         if (data.change !== undefined) {
             coin.change = data.change;
         }
+        if (data.priceChange !== undefined) {
+            coin.priceChange = data.priceChange;
+        }
 
         const card = document.querySelectorAll(".coin-card")[index];
-        card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
+        card.textContent = `${coin.pair} $${coin.price}`;
 
         card.classList.toggle("active-coin-negative", coin.change < 0);
 
         const activeIndex = [...document.querySelectorAll(".coin-card")].findIndex(c => c.classList.contains("active-coin"));
         if (activeIndex === index) {
-            selectedToken.textContent = card.textContent;
+            updateSelectedToken(coin);
         }
     };
 }
@@ -498,14 +528,17 @@ async function initPrices() {
             if (data) {
                 coin.price = data.price;
                 coin.change = data.change;
+                if (data.priceChange !== undefined) {
+                    coin.priceChange = data.priceChange;
+                }
 
                 const card = document.querySelectorAll(".coin-card")[index];
-                card.textContent = `${coin.pair} $${coin.price} ${coin.change > 0 ? "+" : ""}${coin.change}%`;
+                card.textContent = `${coin.pair} $${coin.price}`;
                 card.classList.toggle("active-coin-negative", coin.change < 0);
 
                 const activeIndex = [...document.querySelectorAll(".coin-card")].findIndex(c => c.classList.contains("active-coin"));
                 if (activeIndex === index) {
-                    selectedToken.textContent = card.textContent;
+                    updateSelectedToken(coin);
                 }
             }
             connectWebSocket(coin, index);

@@ -277,9 +277,11 @@ async def ticker_websocket(websocket: WebSocket, exchange: str, symbol: str):
                     close = float(msg["c"])
                     open_ = float(msg["o"])
                     change = round((close - open_) / open_ * 100, 2)
+                    price_change = round(close - open_, 2)
                     ticker = {
                         "price":  f"{close:,.2f}",
                         "change": change,
+                        "priceChange": price_change,
                     }
                     try:
                         await websocket.send_json(ticker)
@@ -323,9 +325,11 @@ async def get_prices(exchange: str = Query("binance")):
                     close = float(ctx["markPx"])
                     open_ = float(ctx["prevDayPx"])
                     change = round((close - open_) / open_ * 100, 2) if open_ else 0.0
+                    price_change = round(close - open_, 2) if open_ else 0.0
                     result[sym + "USDT"] = {
                         "price": f"{close:,.2f}",
-                        "change": change
+                        "change": change,
+                        "priceChange": price_change
                     }
         return result
         
@@ -346,8 +350,10 @@ async def get_prices(exchange: str = Query("binance")):
             close = float(item["lastPrice"])
             open_ = float(item["openPrice"])
             change = round((close - open_) / open_ * 100, 2) if open_ else 0.0
+            price_change = round(close - open_, 2) if open_ else 0.0
             result[sym] = {
                 "price": f"{close:,.2f}",
-                "change": change
+                "change": change,
+                "priceChange": price_change
             }
         return result
