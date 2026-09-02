@@ -255,6 +255,7 @@ function syncAutoBtn() {
 function setCandleData(candles) {
     candleData = candles;
     candleSeries.setData(candles);
+    updateSRIndicator(candles);
     syncAutoBtn();
 }
 
